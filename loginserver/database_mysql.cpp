@@ -59,7 +59,7 @@ DatabaseMySQL::~DatabaseMySQL()
 	}
 }
 
-bool DatabaseMySQL::GetLoginDataFromAccountName(string name, string &password, unsigned int &id)
+bool DatabaseMySQL::GetLoginDataFromAccountName(string name, string &password, unsigned int &password_hash_type, unsigned int &id)
 {
 	if (!database)
 	{
@@ -69,7 +69,7 @@ bool DatabaseMySQL::GetLoginDataFromAccountName(string name, string &password, u
 	MYSQL_RES *res;
 	MYSQL_ROW row;
 	stringstream query(stringstream::in | stringstream::out);
-	query << "SELECT LoginServerID, AccountPassword FROM " << server.options.GetAccountTable() << " WHERE AccountName = '";
+	query << "SELECT LoginServerID, AccountPassword, PasswordHashType FROM " << server.options.GetAccountTable() << " WHERE AccountName = '";
 	query << name;
 	query << "'";
 
@@ -87,6 +87,7 @@ bool DatabaseMySQL::GetLoginDataFromAccountName(string name, string &password, u
 		{
 			id = atoi(row[0]);
 			password = row[1];
+			password_hash_type = atoi(row[2]);
 			mysql_free_result(res);
 			return true;
 		}
@@ -210,6 +211,25 @@ void DatabaseMySQL::UpdateLSAccountData(unsigned int id, string ip_address)
 	query << "UPDATE " << server.options.GetAccountTable() << " SET LastIPAddress = '";
 	query << ip_address;
 	query << "', LastLoginDate = now() where LoginServerID = ";
+	query << id;
+
+	if (mysql_query(database, query.str().c_str()) != 0)
+	{
+		Log.Out(Logs::General, Logs::Error, "Mysql query failed: %s", query.str().c_str());
+	}
+}
+
+void DatabaseMySQL::UpdateLSAccountPasswordHash(unsigned int id, string password_hash, unsigned int password_hash_type)
+{
+	if (!database)
+	{
+		return;
+	}
+
+	stringstream query(stringstream::in | stringstream::out);
+	query << "UPDATE " << server.options.GetAccountTable() << " SET AccountPassword = '";
+	query << password_hash << "', PasswordHashType = ";
+	query << password_hash_type << " WHERE LoginServerID = ";
 	query << id;
 
 	if (mysql_query(database, query.str().c_str()) != 0)

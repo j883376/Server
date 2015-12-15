@@ -57,7 +57,7 @@ public:
 	* Needed for client login procedure.
 	* Returns true if the record was found, false otherwise.
 	*/
-	virtual bool GetLoginDataFromAccountName(std::string name, std::string &password, unsigned int &id);
+	virtual bool GetLoginDataFromAccountName(std::string name, std::string &password, unsigned int &password_hash_type, unsigned int &id);
 
 	virtual bool CreateLoginData(std::string name, std::string &password, unsigned int &id);
 
@@ -73,6 +73,11 @@ public:
 	* Updates the ip address of the client with account id = id
 	*/
 	virtual void UpdateLSAccountData(unsigned int id, std::string ip_address);
+
+	/**
+	* Updates the password hash of the client with account id = id
+	*/
+	virtual void UpdateLSAccountPasswordHash(unsigned int id, std::string password_hash, unsigned int password_hash_type);
 
 	/**
 	* Updates or creates the login server account with info from world server

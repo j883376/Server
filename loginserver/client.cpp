@@ -190,41 +190,14 @@ void Client::Handle_Login(const char* data, unsigned int size)
 	string entered_username;
 	string entered_password_hash_result;
 
-	char *login_packet_buffer = nullptr;
-
 	unsigned int db_account_id = 0;
 	string db_account_password_hash;
+	unsigned int db_account_password_hash_type = 0;
 
-#ifdef WIN32
-	login_packet_buffer = server.eq_crypto->DecryptUsernamePassword(data, size, server.options.GetEncryptionMode());
-
-	int login_packet_buffer_length = strlen(login_packet_buffer);
-	entered_password_hash_result.assign(login_packet_buffer, login_packet_buffer_length);
-	entered_username.assign((login_packet_buffer + login_packet_buffer_length + 1), strlen(login_packet_buffer + login_packet_buffer_length + 1));
-
-	if(server.options.IsTraceOn()) {
-		Log.Out(Logs::General, Logs::Debug, "User: %s", entered_username.c_str());
-		Log.Out(Logs::General, Logs::Debug, "Hash: %s", entered_password_hash_result.c_str());
-	}
-
-	server.eq_crypto->DeleteHeap(login_packet_buffer);
-#else
-	login_packet_buffer = DecryptUsernamePassword(data, size, server.options.GetEncryptionMode());
-
-	int login_packet_buffer_length = strlen(login_packet_buffer);
-	entered_password_hash_result.assign(login_packet_buffer, login_packet_buffer_length);
-	entered_username.assign((login_packet_buffer + login_packet_buffer_length + 1), strlen(login_packet_buffer + login_packet_buffer_length + 1));
-
-	if(server.options.IsTraceOn()) {
-		Log.Out(Logs::General, Logs::Debug, "User: %s", entered_username.c_str());
-		Log.Out(Logs::General, Logs::Debug, "Hash: %s", entered_password_hash_result.c_str());
-	}
-
-	_HeapDeleteCharBuffer(login_packet_buffer);
-#endif
+	RetrieveLoginInfo(data, size, entered_username, entered_password_hash_result, server.options.GetEncryptionMode());
 
 	bool result;
-	if(server.db->GetLoginDataFromAccountName(entered_username, db_account_password_hash, db_account_id) == false) {
+	if(server.db->GetLoginDataFromAccountName(entered_username, db_account_password_hash, db_account_password_hash_type, db_account_id) == false) {
 		/* If we have auto_create_accounts enabled in the login.ini, we will process the creation of an account on our own*/
 		if (
 			server.config->GetVariable("options", "auto_create_accounts").compare("TRUE") == 0 && 
@@ -243,7 +216,18 @@ void Client::Handle_Login(const char* data, unsigned int size)
 			result = true;
 		}
 		else {
-			result = false;
+			// If login fails with default hash mode, try the hash type for their account in the database
+			// and update the hash to the new format accordingly
+			string entered_username_db;
+			string entered_password_hash_result_db;
+			RetrieveLoginInfo(data, size, entered_username_db, entered_password_hash_result_db, db_account_password_hash_type);
+			if (db_account_password_hash.compare(entered_password_hash_result_db) == 0) {
+				server.db->UpdateLSAccountPasswordHash(db_account_id, entered_password_hash_result, server.options.GetEncryptionMode());
+				result = true;
+			}
+			else {
+				result = false;
+			}
 		}
 	}
 
@@ -399,3 +383,35 @@ void Client::GenerateKey()
 	}
 }
 
+void Client::RetrieveLoginInfo(const char* data, unsigned int size, std::string &username, std::string &password_hash_result, int hash_type)
+{
+	char *login_packet_buffer = nullptr;
+
+#ifdef WIN32
+	login_packet_buffer = server.eq_crypto->DecryptUsernamePassword(data, size, hash_type);
+
+	int login_packet_buffer_length = strlen(login_packet_buffer);
+	password_hash_result.assign(login_packet_buffer, login_packet_buffer_length);
+	username.assign((login_packet_buffer + login_packet_buffer_length + 1), strlen(login_packet_buffer + login_packet_buffer_length + 1));
+
+	if(server.options.IsTraceOn()) {
+		Log.Out(Logs::General, Logs::Debug, "User: %s", username.c_str());
+		Log.Out(Logs::General, Logs::Debug, "Hash: %s", password_hash_result.c_str());
+	}
+
+	server.eq_crypto->DeleteHeap(login_packet_buffer);
+#else
+	login_packet_buffer = DecryptUsernamePassword(data, size, hash_type);
+
+	int login_packet_buffer_length = strlen(login_packet_buffer);
+	password_hash_result.assign(login_packet_buffer, login_packet_buffer_length);
+	username.assign((login_packet_buffer + login_packet_buffer_length + 1), strlen(login_packet_buffer + login_packet_buffer_length + 1));
+
+	if(server.options.IsTraceOn()) {
+		Log.Out(Logs::General, Logs::Debug, "User: %s", username.c_str());
+		Log.Out(Logs::General, Logs::Debug, "Hash: %s", password_hash_result.c_str());
+	}
+
+	_HeapDeleteCharBuffer(login_packet_buffer);
+#endif
+}

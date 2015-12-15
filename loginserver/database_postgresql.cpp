@@ -53,7 +53,7 @@ DatabasePostgreSQL::~DatabasePostgreSQL()
 	}
 }
 
-bool DatabasePostgreSQL::GetLoginDataFromAccountName(string name, string &password, unsigned int &id)
+bool DatabasePostgreSQL::GetLoginDataFromAccountName(string name, string &password, unsigned int &password_hash_type, unsigned int &id)
 {
 	if(!db)
 	{
@@ -74,7 +74,7 @@ bool DatabasePostgreSQL::GetLoginDataFromAccountName(string name, string &passwo
 	}
 
 	stringstream query(stringstream::in | stringstream::out);
-	query << "SELECT LoginServerID, AccountPassword FROM " << server.options.GetAccountTable() << " WHERE AccountName = '";
+	query << "SELECT LoginServerID, AccountPassword, PasswordHashType FROM " << server.options.GetAccountTable() << " WHERE AccountName = '";
 	query << name;
 	query << "'";
 
@@ -92,6 +92,7 @@ bool DatabasePostgreSQL::GetLoginDataFromAccountName(string name, string &passwo
 	{
 		id = atoi(PQgetvalue(res, 0, 0));
 		password = PQgetvalue(res, 0, 1);
+		password_hash_type = atoi(PQgetvalue(res, 0, 2));
 		PQclear(res);
 		return true;
 	}
@@ -182,6 +183,41 @@ void DatabasePostgreSQL::UpdateLSAccountData(unsigned int id, string ip_address)
 	query << "UPDATE " << server.options.GetAccountTable() << " SET LastIPAddress = '";
 	query << ip_address;
 	query << "', LastLoginDate = current_date where LoginServerID = ";
+	query << id;
+	PGresult *res = PQexec(db, query.str().c_str());
+
+	char *error = PQresultErrorMessage(res);
+	if(strlen(error) > 0)
+	{
+		Log.Out(Logs::General, Logs::Error, "Database error in DatabasePostgreSQL::GetLoginDataFromAccountName(): %s", error);
+	}
+	PQclear(res);
+}
+
+void DatabasePostgreSQL::UpdateLSAccountPasswordHash(unsigned int id, string password_hash, unsigned int password_hash_type)
+{
+	if(!db)
+	{
+		return;
+	}
+
+	/**
+	* PostgreSQL doesn't have automatic reconnection option like mysql
+	* but it's easy to check and reconnect
+	*/
+	if(PQstatus(db) != CONNECTION_OK)
+	{
+		PQreset(db);
+		if(PQstatus(db) != CONNECTION_OK)
+		{
+			return;
+		}
+	}
+
+	stringstream query(stringstream::in | stringstream::out);
+	query << "UPDATE " << server.options.GetAccountTable() << " SET AccountPassword = '";
+	query << password_hash << "', PasswordHashType = ";
+	query << password_hash_type << " WHERE LoginServerID = ";
 	query << id;
 	PGresult *res = PQexec(db, query.str().c_str());
 

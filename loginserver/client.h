@@ -102,6 +102,11 @@ public:
 	void GenerateKey();
 
 	/**
+	* Retrieves the decrypted client username and password with a given hash type.
+	*/
+	void RetrieveLoginInfo(const char* data, unsigned int size, std::string &username, std::string &password, int hash_type);
+
+	/**
 	* Gets the account id of this client.
 	*/
 	unsigned int GetAccountID() const { return account_id; }
